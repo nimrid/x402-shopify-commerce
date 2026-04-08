@@ -259,6 +259,8 @@ export async function handleCheckout(req: Request, res: Response) {
     // Verify payment with facilitator
     try {
       console.log(`[${requestId}] 🔐 Verifying payment with facilitator...`);
+      const verifyStart = Date.now();
+
 
       // Decode X-Payment header
       let paymentPayload: any;
@@ -290,6 +292,7 @@ export async function handleCheckout(req: Request, res: Response) {
         paymentPayload,
         paymentRequirements as any
       );
+      console.log(`[${requestId}] 🔍 Verification result in ${Date.now() - verifyStart}ms:`, verifyResult.isValid ? "VALID" : "INVALID");
 
       if (!verifyResult.isValid) {
         console.error(`[${requestId}] ❌ Payment verification failed:`, verifyResult.invalidReason);
@@ -302,7 +305,10 @@ export async function handleCheckout(req: Request, res: Response) {
       console.log(`[${requestId}] ✅ Payment verified, settling...`);
 
       // Settle payment
+      console.log(`[${requestId}] 💰 Settling payment on-chain...`);
+      const settleStart = Date.now();
       await facilitatorClient.settle(paymentPayload, paymentRequirements as any);
+      console.log(`[${requestId}] ✅ Payment settled in ${Date.now() - settleStart}ms`);
 
       console.log(`[${requestId}] ✅ Payment settled on-chain`);
 
@@ -359,6 +365,8 @@ export async function handleCheckout(req: Request, res: Response) {
         },
       };
 
+      console.log(`[${requestId}] 🌐 Calling Shopify API: ${endpoint}`);
+      const shopifyStart = Date.now();
       const shopifyRes = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -367,6 +375,7 @@ export async function handleCheckout(req: Request, res: Response) {
         },
         body: JSON.stringify(orderPayload),
       });
+      console.log(`[${requestId}] 📥 Shopify responded with status ${shopifyRes.status} in ${Date.now() - shopifyStart}ms`);
 
       if (!shopifyRes.ok) {
         const errorText = await shopifyRes.text();

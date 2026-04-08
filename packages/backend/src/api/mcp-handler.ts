@@ -425,12 +425,18 @@ async function callBackendAPI(
   headers?: any
 ): Promise<any> {
   const url = `${BACKEND_URL}${endpoint}`;
+  console.error(`[callBackendAPI] 📡 ${method} ${url}`);
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
   const options: RequestInit = {
     method,
     headers: {
       "Content-Type": "application/json",
       ...headers,
     },
+    signal: controller.signal as any,
   };
 
   if (body) {
@@ -438,7 +444,7 @@ async function callBackendAPI(
       try {
         const parsed = JSON.parse(body);
         if (typeof parsed === "object" && parsed !== null) {
-          options.body = body; // It's already stringified JSON object
+          options.body = body;
         } else {
           options.body = JSON.stringify(body);
         }
@@ -450,20 +456,38 @@ async function callBackendAPI(
     }
   }
 
-  const response = await fetch(url, options);
-  const text = await response.text();
-
-  let data;
   try {
-    data = JSON.parse(text);
-  } catch {
-    data = text;
-  }
+    const startTime = Date.now();
+    const response = await fetch(url, options);
+    clearTimeout(timeoutId);
+    const duration = Date.now() - startTime;
+    
+    console.error(`[callBackendAPI] 📥 Response: ${response.status} (${duration}ms)`);
+    const text = await response.text();
 
-  return {
-    status: response.status,
-    data,
-  };
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+
+    return {
+      status: response.status,
+      data,
+    };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error(`[callBackendAPI] ❌ Request timed out after 45s: ${method} ${url}`);
+      return {
+        status: 408,
+        data: { error: "Backend request timed out" }
+      };
+    }
+    console.error(`[callBackendAPI] ❌ Fetch error:`, error.message);
+    throw error;
+  }
 }
 
 /**
@@ -567,10 +591,14 @@ async function handleFinalizeCheckout(args: any): Promise<any> {
     clientReferenceId: `agent_${Date.now()}`,
   };
 
+  console.error(`[handleFinalizeCheckout] 🔐 Finalizing with signature: ${args.paymentSignature.slice(0, 20)}...`);
+  
   // Send payment signature in the correct v2 header
   const result = await callBackendAPI("/x402/checkout", "POST", checkoutBody, {
     "Payment-Signature": args.paymentSignature,
   });
+
+  console.error(`[handleFinalizeCheckout] 📨 Backend result status: ${result.status}`);
 
   if (result.status === 200) {
     // Successful order

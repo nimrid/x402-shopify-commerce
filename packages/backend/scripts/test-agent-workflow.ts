@@ -77,7 +77,7 @@ async function main() {
   const microUsdc = reqObj.amount;
   const payTo = reqObj.payTo;
 
-  console.log(`\n[2/3] Calling Payment Agent to pay on Solana...`);
+  console.log(`\n[2/3] Calling Payment Agent to pay on Stellar...`);
   console.log(`- Amount to Pay:  ${microUsdc} micro USDC`);
   console.log(`- Destination:    ${payTo}`);
   

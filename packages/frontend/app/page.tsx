@@ -27,6 +27,13 @@ export default function Home() {
           {/* Left Content */}
           <div className="space-y-8">
             <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-200 dark:border-emerald-800 shadow-sm mb-2 animate-in fade-in slide-in-from-top-4 duration-1000">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Built on Stellar Blockchain
+              </div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white leading-tight">
                 Make Your Shopify Store{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-300">
@@ -170,7 +177,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-emerald-100/50 dark:border-emerald-900/30 py-8 text-center text-slate-600 dark:text-slate-400">
-        <p>X402 - Making Shopify stores agent-ready for the future of commerce</p>
+        <p>X402 - Making Shopify stores agent-ready for the future of commerce on Stellar</p>
       </footer>
     </div>
   );

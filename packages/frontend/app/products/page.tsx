@@ -240,7 +240,7 @@ export default function ProductsPage() {
                           url: domain,
                           adminAccessToken: token,
                           currency: "USD",
-                          networks: ["solana-devnet"],
+                          networks: ["stellar-testnet"],
                           asset: "USDC",
                           agentMetadata: {
                             minOrder: "5.00",

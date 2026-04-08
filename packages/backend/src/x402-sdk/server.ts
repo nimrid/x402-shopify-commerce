@@ -62,7 +62,7 @@ export interface PaymentOptions {
  * x402 Server for Stellar USDC payments.
  *
  * Wraps the official @x402/express paymentMiddleware with a simple API
- * that mirrors the old Solana custom SDK for drop-in compatibility.
+ * that mirrors the old Stellar custom SDK for drop-in compatibility.
  */
 export class X402Server {
   private config: X402ServerConfig;
