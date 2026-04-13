@@ -13,7 +13,7 @@ This backend implements a two-phase checkout system that integrates Shopify e-co
 - **Database**: Supabase (PostgreSQL)
 - **Payments**: Stellar blockchain (USDC)
 - **Protocol**: HTTP 402 Payment Required (v2) + JSON-RPC 2.0 (MCP)
-- **Servers**: Commerce MCP Server (`/mcp`) & Payment Agent MCP Server (`/mcp-payment`)
+- **Servers**: Commerce MCP Server (`/mcp`) & Payment Agent MCP Server (`/mcp/payment` on port 3001, or `/mcp` on port 3002 when running `pnpm dev:all`)
 
 ## API Endpoints
 
@@ -78,9 +78,15 @@ List all available stores.
   {
     "id": "store_xxx",
     "name": "Store Name",
-    "url": "https://store.myshopify.com",
+    "description": "Store description",
     "currency": "USD",
-    "description": "Store description"
+    "networks": ["stellar:testnet"],
+    "asset": "USDC",
+    "agentMetadata": {
+      "minOrder": "5.00",
+      "supportsPhysical": true,
+      "supportsDigital": false
+    }
   }
 ]
 ```
@@ -211,13 +217,13 @@ Initiates a checkout and returns payment requirements.
 
 #### **PHASE 2: Finalize Checkout**
 
-##### `POST /x402/checkout` (with X-PAYMENT header)
+##### `POST /x402/checkout` (with `Payment-Signature` header)
 
-Finalizes the checkout after payment has been made. Include the payment proof in the `X-PAYMENT` header.
+Finalizes the checkout after payment has been made. Include the base64-encoded x402 payment payload in the `Payment-Signature` header.
 
 **Request Headers:**
 ```
-X-PAYMENT: {"transactionHash":"...", "network":"stellar:testnet", "timestamp":1234567890}
+Payment-Signature: <base64-encoded x402 payment payload>
 ```
 
 **Request Body:**
@@ -261,9 +267,6 @@ X-PAYMENT: {"transactionHash":"...", "network":"stellar:testnet", "timestamp":12
   "payment": {
     "verified": true,
     "txHash": "abcXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-  },
-  "delivery": {
-    "estimatedTime": "expected in 7 days"
   }
 }
 ```
@@ -315,9 +318,6 @@ Get order details by order ID. Returns enriched data with store and product info
     "tax": "0",
     "total": "199.98",
     "currency": "USD"
-  },
-  "delivery": {
-    "estimatedTime": "expected in 7 days"
   }
 }
 ```
@@ -338,35 +338,51 @@ Get all order intents for a store.
 The backend implements a JSON-RPC 2.0 server that provides tools for AI agents to interact with the checkout system.
 
 ### Endpoint
--`POST /mcp` - Commerce Server (Store discovery & checkout)
--`POST /mcp-payment` - Payment Agent (Autonomous signing)
+- `POST /mcp` — Commerce Server (all 6 agent tools: discovery, checkout & payment signing)
+- `POST /mcp/payment` — Payment Agent embedded in main server (`make_usdc_payment` only)
+- `POST /mcp` on port 3002 — Standalone Payment Server (started by `pnpm dev:all`, `make_usdc_payment` only)
 
-### Claude Desktop Configuration
+### Claude Desktop/Agentic Platform Configuration
 
-Add the following to your `claude_desktop_config.json`:
+Add the following to your `claude_desktop_config.json` or `mcp_config.json`:
 
-#### Local Stdio (Direct)
+#### Local Stdio (Direct — Recommended)
 ```json
-"x402-shopping-agent": {
-  "command": "node",
-  "args": [
-    "--no-warnings",
-    "--loader",
-    "tsx",
-    "/absolute/path/to/x402-shopify-commerce/packages/backend/src/mcp-stdio-server.ts"
-  ],
-  "env": {
-    "BACKEND_URL": "http://localhost:3001"
+{
+  "mcpServers": {
+    "x402-shopping-agent": {
+      "command": "/filepath/filepath/stellar/x402-shopify-commerce/packages/backend/node_modules/.bin/tsx",
+      "args": [
+        "/filepath/filepath/stellar/x402-shopify-commerce/packages/backend/src/mcp-stdio-server.ts"
+      ],
+      "cwd": "/filepath/filepath/stellar/x402-shopify-commerce/packages/backend",
+      "env": {
+        "DOTENVX": "0",
+        "DOTENV_CONFIG_QUIET": "true",
+        "BACKEND_URL": "http://127.0.0.1:3001"
+      }
+    }
   }
 }
 ```
 
-#### Remote SSE (via ngrok)
+> [!NOTE]
+> Replace `/filepath/filepath/` with your actual absolute path to the project.
+
+#### Remote HTTP JSON-RPC (via ngrok)
 ```json
-"x402-shopping-agent": {
-  "transport": "sse",
-  "url": "https://your-ngrok.io/mcp"
+{
+  "mcpServers": {
+    "x402-shopping-agent": {
+      "transport": "http",
+      "url": "https://your-ngrok.io/mcp"
+    }
+  }
 }
+```
+
+> [!NOTE]
+> The `/mcp` endpoint accepts standard **HTTP POST** with a JSON-RPC 2.0 body — not SSE streaming. A single entry to `/mcp` exposes all 6 tools.
 ```
 
 ### Available Tools: Commerce Server (`/mcp`)
@@ -590,14 +606,15 @@ Get order details by order ID.
 
 ---
 
-#### Available Tools: Payment Agent (`/mcp-payment`)
+#### Available Tools: Payment Agent (`/mcp/payment` or port 3002 `/mcp`)
 
 #### 1. `make_usdc_payment`
 Signs an x402-protected request using the agent's wallet.
 
 **Arguments:**
-- `resourceUrl` (string): The URL of the resource returning 402 (usually a checkout endpoint)
-- `network` (string): Stellar network (default: `stellar:testnet`)
+- `resourceUrl` (string, **required**): The URL of the resource returning 402 (usually the checkout endpoint)
+- `checkoutInfo` (object, optional): The original checkout body (items, address, etc.) — **required** when the resource needs a POST to probe for 402
+- `network` (string, optional): Stellar network identifier (default: `stellar:testnet`)
 
 **Flow:**
 1. Probes the resource to get the 402 requirements
@@ -643,8 +660,8 @@ This backend implements the x402 Version 2 protocol with the **Exact** scheme fo
 ### Stellar USDC Asset (Testnet)
 - **Issuer**: `CBIEL...QDAMA`
 - **Asset Code**: `USDC`
-- **Decimals**: 7 (Stellar native assets/classic tokens)
-- **Stroops**: 1 USDC = 10,000,000 stroops (internally x402 uses 10^5 stroop multiplier for decimals)
+- **Decimals**: 7 (Stellar native assets)
+- **Stroops**: 1 USDC = 10,000,000 stroops (the backend converts dollar amounts: `amount_in_stroops = dollars × 10,000,000`)
 
 ### Payment Requirements Format (Stellar Exact)
 
@@ -658,11 +675,12 @@ This backend implements the x402 Version 2 protocol with the **Exact** scheme fo
   "accepts": [{
     "scheme": "exact",
     "price": "$199.98",
-    "amount": "19998000000",
-    "asset": "USDC:issuer...",
+    "amount": "1999800000",
+    "asset": "CBIEL...QDAMA",
     "network": "stellar:testnet",
-    "payTo": "recipient_address...",
-    "maxTimeoutSeconds": 900
+    "payTo": "GDN4Q...QBU3C",
+    "maxTimeoutSeconds": 900,
+    "extra": { "areFeesSponsored": true }
   }]
 }
 ```
@@ -731,12 +749,9 @@ When a client finalizes checkout with the X-PAYMENT header:
 - `currency` (string): Currency
 - `status` (string): Status (pending, paid)
 - `expires_at` (timestamp): Expiration time
-- `body_hash` (string): SHA256 hash of request body
-- `x402_requirements` (json): Payment requirements
 - `verified_at` (timestamp): Verification time
 - `verification_status` (string): Verification result
 - `payment_tx_hash` (string): Stellar transaction hash
-- `payment_header_b64` (string): Encoded payment proof
 
 #### `orders`
 - `id` (string): Order ID
@@ -761,10 +776,10 @@ When a client finalizes checkout with the X-PAYMENT header:
 # Supabase
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Stellar
-WALLET_SECRET_KEY=S...
+# Stellar / x402
+WALLET_SECRET_KEY=SC...
+X402_NETWORK=stellar:testnet
 X402_RECIPIENT_ADDRESS=G...
 X402_USDC_ISSUER=G...
 X402_FACILITATOR_API_KEY=sk_...
@@ -772,6 +787,7 @@ STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 
 # Server
 PORT=3001
+PAYMENT_SERVER_PORT=3002
 SHOPIFY_API_VERSION=2025-10
 FRONTEND_URL=http://localhost:3000
 ```
@@ -801,7 +817,11 @@ cp .env.example .env
 
 3. Start development server:
 ```bash
-npm run dev
+# Start main server only (port 3001)
+pnpm dev
+
+# Start main server + standalone payment server (ports 3001 & 3002)
+pnpm dev:all
 ```
 
 Server will run on `http://localhost:3001`

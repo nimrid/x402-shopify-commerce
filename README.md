@@ -78,10 +78,11 @@ x402-shopify-commerce/
 │       │   ├── mcp-handler.ts         # Commerce tools (discovery/orders)
 │       │   ├── mcp-payment-handler.ts # Payment agent tools (signing)
 │       │   └── ...
-│       ├── src/utils/                 # Payment helpers
-│           ├── x402-payment-helpers.ts    # HTTP 402 utilities
+│       ├── src/utils/                 # Shared helpers
+│           ├── supabase.ts                # Supabase client init
+│           ├── utils.ts                   # General utilities (e.g. toDollarStr)
 │           ├── x402-config.ts             # Payment configuration
-│           └── ...
+│           └── x402-payment-helpers.ts    # HTTP 402 utilities
 │
 └── README.md              # This file
 ```
@@ -140,8 +141,9 @@ pnpm dev:all
 ```
 
 This starts:
-- **Commerce Server**: `http://localhost:3001/mcp` (Product discovery & Checkout)
-- **Payment Agent Server**: `http://localhost:3001/mcp/payment` (Autonomous signing)
+- **Commerce Server** (port 3001): `http://localhost:3001/mcp` — Product discovery, checkout & all 6 agent tools
+- **Payment Agent** (embedded, port 3001): `http://localhost:3001/mcp/payment` — also available with just `pnpm dev`
+- **Standalone Payment Server** (port 3002, `dev:all` only): `http://localhost:3002/mcp` — exposes only `make_usdc_payment`
 
 ## Accessing the Application
 
@@ -156,8 +158,8 @@ This starts:
 
 The backend provides two ways for AI agents (like Claude Desktop) to interact with your store:
 
-#### 1. Claude Desktop Setup (Stdio) - **Recommended for local dev**
-Update your Claude Desktop configuration file (Mac: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+#### 1. Claude Desktop Setup (Stdio)/ Agentic platform - **Recommended for local dev**
+Update your Claude Desktop configuration file (Mac: `~/Library/Application Support/Claude/claude_desktop_config.json`) or `mcp_config.json`:
 
 ```json
 {
@@ -181,23 +183,28 @@ Update your Claude Desktop configuration file (Mac: `~/Library/Application Suppo
 > [!NOTE]
 > Replace `/filepath/filepath/` in the configuration above with your actual absolute path to the project.
 
-#### 2. Specialized MCP Servers (SSE/Remote)
-These endpoints are exposed when running `pnpm dev:all`. Useful for remote agents or non-local setups:
+#### 2. HTTP MCP Servers (JSON-RPC / Remote)
+These endpoints are plain **HTTP JSON-RPC 2.0 POST** endpoints — the remote equivalent of the stdio config above.
 
-- **Commerce Server**: `http://localhost:3001/mcp`
-- **Payment Agent Server**: `http://localhost:3001/mcp/payment` (or `http://localhost:3002/mcp` if running `dev:all`)
+`http://localhost:3001/mcp` exposes **all 6 agent tools** (including `make_usdc_payment`), so a single config entry is all you need — just like the stdio setup:
 
-For Claude to use these via **SSE**:
+For remote agent access, expose via ngrok and configure your MCP client:
 ```json
 {
   "mcpServers": {
-    "x402-commerce": {
-      "transport": "sse",
+    "x402-shopping-agent": {
+      "transport": "http",
       "url": "https://your-ngrok.io/mcp"
     }
   }
 }
 ```
+
+> [!NOTE]
+> These endpoints accept standard **HTTP POST** with a JSON-RPC 2.0 body — not SSE streaming.
+
+> [!TIP]
+> **Advanced / split-agent setup:** If you want a dedicated agent that can *only* sign payments (no shopping tools), you can point it at `/mcp/payment` (port 3001) or `http://localhost:3002/mcp` (standalone server, started by `pnpm dev:all`). Both expose `make_usdc_payment` only.
 
 ### Available Tools:
 - `list_stores` - Browse available stores
