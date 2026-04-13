@@ -123,6 +123,8 @@ SHOPIFY_API_VERSION=2025-10
 # x402 Payment Configuration
 X402_NETWORK=stellar:testnet
 X402_RECIPIENT_ADDRESS=GDN4Q...QBU3C
+X402_USDC_ISSUER=GBBD6...G6A
+X402_FACILITATOR_API_KEY=sk_...
 
 # Stellar Wallet (Private Key)
 WALLET_SECRET_KEY=SC...
@@ -139,7 +141,7 @@ pnpm dev:all
 
 This starts:
 - **Commerce Server**: `http://localhost:3001/mcp` (Product discovery & Checkout)
-- **Payment Agent Server**: `http://localhost:3001/mcp-payment` (Autonomous signing)
+- **Payment Agent Server**: `http://localhost:3001/mcp/payment` (Autonomous signing)
 
 ## Accessing the Application
 
@@ -161,26 +163,29 @@ Update your Claude Desktop configuration file (Mac: `~/Library/Application Suppo
 {
   "mcpServers": {
     "x402-shopping-agent": {
-      "command": "node",
+      "command": "/filepath/filepath/stellar/x402-shopify-commerce/packages/backend/node_modules/.bin/tsx",
       "args": [
-        "--no-warnings",
-        "--loader",
-        "tsx",
-        "/absolute/path/to/x402-shopify-commerce/packages/backend/src/mcp-stdio-server.ts"
+        "/filepath/filepath/stellar/x402-shopify-commerce/packages/backend/src/mcp-stdio-server.ts"
       ],
+      "cwd": "/filepath/filepath/stellar/x402-shopify-commerce/packages/backend",
       "env": {
-        "BACKEND_URL": "http://localhost:3001"
+        "DOTENVX": "0",
+        "DOTENV_CONFIG_QUIET": "true",
+        "BACKEND_URL": "http://127.0.0.1:3001"
       }
     }
   }
 }
 ```
 
+> [!NOTE]
+> Replace `/filepath/filepath/` in the configuration above with your actual absolute path to the project.
+
 #### 2. Specialized MCP Servers (SSE/Remote)
 These endpoints are exposed when running `pnpm dev:all`. Useful for remote agents or non-local setups:
 
 - **Commerce Server**: `http://localhost:3001/mcp`
-- **Payment Agent Server**: `http://localhost:3001/mcp-payment`
+- **Payment Agent Server**: `http://localhost:3001/mcp/payment` (or `http://localhost:3002/mcp` if running `dev:all`)
 
 For Claude to use these via **SSE**:
 ```json
@@ -216,7 +221,7 @@ ngrok http 3002
 
 Update your LLM chat client to use the ngrok URLs:
 - Commerce API: `https://xxxx-ngrok.io/mcp`
-- Payment Agent API: `https://yyyy-ngrok.io/mcp-payment`
+- Payment Agent API: `https://xxxx-ngrok.io/mcp/payment` (Port 3001) or `https://yyyy-ngrok.io/mcp` (Port 3002)
 
 ## API Documentation
 

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { getSupabase } from "../utils/supabase";
-import { toCentsStr } from "../utils/utils";
+import { toDollarStr } from "../utils/utils";
 import { Amounts, CheckoutRequest } from "../types";
 import crypto from "crypto";
 import { getFacilitatorClient, x402Config } from "../utils/x402-config";
@@ -72,8 +72,10 @@ export async function handleCheckout(req: Request, res: Response) {
         }
 
         // Return proper PaymentRequired v2 response
-        const totalInDollars = (parseInt(intent.total_amount) / 100).toFixed(2);
-        const amountInStroops = String(parseInt(intent.total_amount) * 100000);
+        // total_amount is stored as a dollar string e.g. "29.99"
+        // Stellar USDC has 7 decimal places: 1 USDC = 10_000_000 stroops
+        const totalInDollars = parseFloat(intent.total_amount).toFixed(2);
+        const amountInStroops = String(Math.round(parseFloat(intent.total_amount) * 10_000_000));
         
         const paymentRequired = {
           x402Version: 2,
@@ -153,10 +155,10 @@ export async function handleCheckout(req: Request, res: Response) {
       const currency = store.currency || "USD";
 
       const amounts: Amounts = {
-        subtotal: toCentsStr(subtotalNum),
-        shipping: toCentsStr(shippingNum),
-        tax: toCentsStr(taxNum),
-        total: toCentsStr(totalNum),
+        subtotal: toDollarStr(subtotalNum),
+        shipping: toDollarStr(shippingNum),
+        tax: toDollarStr(taxNum),
+        total: toDollarStr(totalNum),
         currency,
       };
 
@@ -187,8 +189,10 @@ export async function handleCheckout(req: Request, res: Response) {
       console.log(`[${requestId}] ✅ Order intent created: ${id}`);
 
       // Build proper PaymentRequired v2 response
-      const totalInDollars = (parseInt(amounts.total) / 100).toFixed(2);
-      const amountInStroops = String(parseInt(amounts.total) * 100000);
+      // amounts.total is a dollar string e.g. "29.99"
+      // Stellar USDC has 7 decimal places: 1 USDC = 10_000_000 stroops
+      const totalInDollars = parseFloat(amounts.total).toFixed(2);
+      const amountInStroops = String(Math.round(parseFloat(amounts.total) * 10_000_000));
       
       const paymentRequired = {
         x402Version: 2,
@@ -271,9 +275,11 @@ export async function handleCheckout(req: Request, res: Response) {
         paymentPayload = JSON.parse(xPaymentHeader);
       }
 
-      // Build payment requirement for verification (this should match one of the 'accepts' entries)
-      const totalInDollars = (parseInt(intent.total_amount) / 100).toFixed(2);
-      const amountInStroops = String(parseInt(intent.total_amount) * 100000);
+      // Build payment requirement for verification (must match the 'accepts' entry sent in Phase 1)
+      // total_amount is a dollar string e.g. "29.99"
+      // Stellar USDC has 7 decimal places: 1 USDC = 10_000_000 stroops
+      const totalInDollars = parseFloat(intent.total_amount).toFixed(2);
+      const amountInStroops = String(Math.round(parseFloat(intent.total_amount) * 10_000_000));
       
       const paymentRequirements = {
         scheme: "exact" as const,
@@ -302,15 +308,14 @@ export async function handleCheckout(req: Request, res: Response) {
         });
       }
 
-      console.log(`[${requestId}] ✅ Payment verified, settling...`);
+      console.log(`[${requestId}] ✅ Payment verified, settling async...`);
 
-      // Settle payment
-      console.log(`[${requestId}] 💰 Settling payment on-chain...`);
+      // Settle payment async (fire-and-forget) — verify() already confirmed the tx is on-chain.
+      // Awaiting settle() blocks for 30s+ on Stellar testnet and causes MCP tool call timeouts.
       const settleStart = Date.now();
-      await facilitatorClient.settle(paymentPayload, paymentRequirements as any);
-      console.log(`[${requestId}] ✅ Payment settled in ${Date.now() - settleStart}ms`);
-
-      console.log(`[${requestId}] ✅ Payment settled on-chain`);
+      facilitatorClient.settle(paymentPayload, paymentRequirements as any)
+        .then(() => console.log(`[${requestId}] ✅ Payment settled in ${Date.now() - settleStart}ms`))
+        .catch((err: any) => console.error(`[${requestId}] ⚠️  settle() error (non-fatal):`, err?.message));
 
       // Extract transaction hash
       const txHash =
@@ -367,14 +372,22 @@ export async function handleCheckout(req: Request, res: Response) {
 
       console.log(`[${requestId}] 🌐 Calling Shopify API: ${endpoint}`);
       const shopifyStart = Date.now();
-      const shopifyRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "X-Shopify-Access-Token": String(store.admin_access_token),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orderPayload),
-      });
+      const shopifyController = new AbortController();
+      const shopifyTimeout = setTimeout(() => shopifyController.abort(), 15_000);
+      let shopifyRes: globalThis.Response;
+      try {
+        shopifyRes = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "X-Shopify-Access-Token": String(store.admin_access_token),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(orderPayload),
+          signal: shopifyController.signal,
+        });
+      } finally {
+        clearTimeout(shopifyTimeout);
+      }
       console.log(`[${requestId}] 📥 Shopify responded with status ${shopifyRes.status} in ${Date.now() - shopifyStart}ms`);
 
       if (!shopifyRes.ok) {

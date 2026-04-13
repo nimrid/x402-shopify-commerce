@@ -29,7 +29,7 @@ if (!PRIVATE_KEY || PRIVATE_KEY.includes("<YOUR")) {
 }
 
 const CHECKOUT_BODY = {
-  storeId: "store_92666f85",
+  storeId: "store_fa19e41d",
   items: [{ productId: "gid://shopify/ProductVariant/48325087625383", quantity: 1 }],
   email: "agent@stellar.org",
   shippingAddress: {

@@ -15,7 +15,7 @@ export async function handleShopifyProducts(req: Request, res: Response) {
     }
 
     const url = storeUrl.trim().replace(/\/$/, "");
-    const apiVersion = "2024-10"; // stable admin API
+    const apiVersion = process.env.SHOPIFY_API_VERSION || "2024-10"; // stable admin API
     const graphqlEndpoint = `${url}/admin/api/${apiVersion}/graphql.json`;
 
     const allProducts: ShopifyProduct[] = [];

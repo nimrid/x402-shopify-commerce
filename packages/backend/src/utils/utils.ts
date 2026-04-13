@@ -15,7 +15,9 @@ export function deriveNameFromUrl(url: string): string {
   }
 }
 
-export function toCentsStr(n: number): string {
+// Stores a dollar amount as a 2-decimal string, e.g. 29.99 → "29.99"
+// NOTE: this is dollars (NOT cents). For stroops: multiply by 10_000_000.
+export function toDollarStr(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 

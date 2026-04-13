@@ -522,11 +522,7 @@ Finalize checkout after payment proof is obtained.
         "postalCode": "94105",
         "country": "US"
       },
-      "paymentProof": {
-        "transactionHash": "abcXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-        "network": "stellar:testnet",
-        "timestamp": 1234567890
-      }
+      "paymentSignature": "base64_encoded_x402_header_value..."
     }
   }
 }
@@ -770,10 +766,13 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # Stellar
 WALLET_SECRET_KEY=S...
 X402_RECIPIENT_ADDRESS=G...
+X402_USDC_ISSUER=G...
+X402_FACILITATOR_API_KEY=sk_...
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 
 # Server
 PORT=3001
+SHOPIFY_API_VERSION=2025-10
 FRONTEND_URL=http://localhost:3000
 ```
 

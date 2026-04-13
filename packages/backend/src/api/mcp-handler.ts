@@ -311,6 +311,29 @@ export async function handleMCPRequest(req: ExpressRequest, res: ExpressResponse
             required: ["orderId"],
           },
         },
+        {
+          name: "make_usdc_payment",
+          description: "Autonomous Wallet: Create and sign a USDC payment for a checkout URL",
+          inputSchema: {
+            type: "object",
+            properties: {
+              resourceUrl: {
+                type: "string",
+                description: "The checkout URL that returned 402",
+              },
+              checkoutInfo: {
+                type: "object",
+                description: "The original checkout arguments (items, address, etc.) used to trigger the 402 - REQUIRED if the resource needs a POST to probe",
+              },
+              network: {
+                type: "string",
+                description: "Stellar network identifier",
+                default: "stellar:testnet",
+              },
+            },
+            required: ["resourceUrl"],
+          },
+        },
       ];
 
       jsonRpcResponse = {
@@ -428,7 +451,7 @@ async function callBackendAPI(
   console.error(`[callBackendAPI] 📡 ${method} ${url}`);
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s: verify(~5s) + shopify(15s) + overhead (settle is now async)
 
   const options: RequestInit = {
     method,

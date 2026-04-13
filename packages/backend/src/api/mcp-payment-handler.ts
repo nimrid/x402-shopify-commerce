@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Request, Response } from "express";
+import { Request as ExpressRequest, Response as ExpressResponse } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
 import { x402Client, x402HTTPClient } from "@x402/fetch";
@@ -33,6 +33,10 @@ async function initializeMCPPaymentServer(): Promise<any> {
       resourceUrl: z
         .string()
         .describe("Full URL of the x402-protected resource to pay for"),
+      checkoutInfo: z
+        .any()
+        .optional()
+        .describe("The original checkout arguments (items, address, etc.) used to trigger the 402 - REQUIRED if the resource needs a POST to probe"),
       network: z
         .string()
         .default("stellar:testnet")
@@ -47,7 +51,7 @@ async function initializeMCPPaymentServer(): Promise<any> {
   return server;
 }
 
-export async function handleMCPPaymentRequest(req: Request, res: Response) {
+export async function handleMCPPaymentRequest(req: ExpressRequest, res: ExpressResponse) {
   const requestId = `mcp_payment_${Date.now()}_${Math.random()
     .toString(36)
     .substring(7)}`;
@@ -103,6 +107,10 @@ export async function handleMCPPaymentRequest(req: Request, res: Response) {
               resourceUrl: {
                 type: "string",
                 description: "Full URL of the x402-protected resource to pay for",
+              },
+              checkoutInfo: {
+                type: "object",
+                description: "The original checkout arguments (items, address, etc.) used to trigger the 402 - REQUIRED if the resource needs a POST to probe",
               },
               network: {
                 type: "string",
@@ -215,8 +223,35 @@ async function handleMakeUsdcPayment(args: any): Promise<any> {
     const httpClient = new x402HTTPClient(client);
 
     // Step 1 – probe for 402
-    console.log(`[handleMakeUsdcPayment] 🌐 Probing resource: ${resourceUrl}`);
-    const firstTry = await fetch(resourceUrl);
+    const { checkoutInfo } = args;
+    let firstTry: globalThis.Response;
+    
+    if (checkoutInfo) {
+      console.log(`[handleMakeUsdcPayment] 🌐 Triggering 402 with POST...`);
+      let finalBody = checkoutInfo;
+      if (typeof checkoutInfo === "string") {
+        try {
+          const parsed = JSON.parse(checkoutInfo);
+          if (typeof parsed !== "object" || parsed === null) {
+            finalBody = JSON.stringify(checkoutInfo);
+          }
+        } catch {
+          finalBody = JSON.stringify(checkoutInfo);
+        }
+      } else {
+        finalBody = JSON.stringify(checkoutInfo);
+      }
+
+      firstTry = await fetch(resourceUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: finalBody,
+      });
+    } else {
+      console.log(`[handleMakeUsdcPayment] 🌐 Probing resource: ${resourceUrl}`);
+      firstTry = await fetch(resourceUrl);
+    }
+
     console.log(`[handleMakeUsdcPayment] Status: ${firstTry.status}`);
 
     if (firstTry.status !== 402) {
